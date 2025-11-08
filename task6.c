@@ -35,11 +35,13 @@ int main(){
         	return -1;
 	}
 
-    	int line = 1;
-    	off_t line_start = -1;
-    	off_t line_ending = -1;
-    	char ch;
-    	ssize_t r;
+    int line = 1;
+    off_t line_start = -1;
+    off_t line_ending = -1;
+	off_t pos = 0;
+    char ch;
+    ssize_t r;
+
 	while (true){
 		r = read(fd, &ch, 1);
 		if(r == -1) {
@@ -51,23 +53,86 @@ int main(){
 			break;
 		}
 
+		if (line == 4 && line_start == -1) {
+            line_start = pos;
+        }
+		pos++;
+
 		if(ch == '\n'){
-			line ++;
+			if (line == 4) {
+                line_end = pos;
+                break;
+            }
+            line++;
 		}
+	}
+
+	off_t file_end = lseek(fd, 0, SEEK_END);
+    if (file_end == (off_t)-1) {
+        perror("lseek end");
+        close(fd);
+        return 1;
+    }
+	
+	off_t tail_len = file_end - line_end;
+    char *tail = NULL;
+
+    if (tail_len > 0) {
+        tail = (char *)malloc((size_t)tail_len);
+        if (tail == NULL) {
+            perror("malloc");
+            close(fd);
+            return 1;
+        }
+
+		if (lseek(fd, line_end, SEEK_SET) == (off_t)-1) {
+            perror("lseek line_end");
+            free(tail);
+            close(fd);
+            return 1;
+        }
+
+        r = read(fd, tail, (size_t)tail_len);
+        if (r == -1) {
+            perror("read tail");
+            free(tail);
+            close(fd);
+            return 1;
+        }
+        if (r != tail_len) {
+            perror(stderr, "short read tail\n");
+            free(tail);
+            close(fd);
+            return 1;
+        }
 	}
 
 	if (lseek(fd, line_start, SEEK_SET) == (off_t)-1) {
         	perror("lseek");
+			free(tail);
         	close(fd);
         	return -1;
     	}
 
-    	wr = write(fd, "100\n", 4);
-    	if (wr == -1) {
-        	perror("write");
-        	close(fd);
-        	return -1;
-    	}
+    wr = write(fd, "100\n", 4);
+    if (wr == -1) {
+    	perror("write");
+		free(tail);
+    	close(fd);
+    	return -1;
+	}
+
+	if (tail_len > 0) {
+        wr = write(fd, tail, (size_t)tail_len);
+        if (wr == -1) {
+            perror("write tail");
+            free(tail);
+            close(fd);
+            return 1;
+        }
+    }
+
+	free(tail);
 
 	if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
         	perror("lseek");
