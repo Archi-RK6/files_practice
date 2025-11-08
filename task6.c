@@ -6,75 +6,83 @@
 #include <errno.h>
 #include <stdbool.h>
 
-int main(){
-	int fd;
-	const char *filename = "numbers.txt";
+int main() {
+    int fd;
+    const char *filename = "numbers.txt";
 
-	fd  = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	if (fd == -1) {
-        	perror("open");
-        	return 1;
-    	}
+    fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd == -1) {
+        perror("open");
+        return 1;
+    }
 
-	char buf[64];
-	ssize_t wr;
-    	for (int i = 1; i <= 10; i++) {
-        	int n = snprintf(buf, sizeof(buf), "%d\n", i);
-		wr = write(fd, buf, n);
-        	if (wr == -1) {
-        	   	perror("write");
-        		close(fd);
-        		return -1;
-        	}
-    	}
-	close(fd);
+    char buf[64];
+    ssize_t wr;
 
-	fd = open(filename, O_RDWR);
-    	if (fd == -1) {
-        	perror("open");
-        	return -1;
-	}
+    for (int i = 1; i <= 10; i++) {
+        int n = snprintf(buf, sizeof(buf), "%d\n", i);
+        wr = write(fd, buf, n);
+        if (wr == -1) {
+            perror("write");
+            close(fd);
+            return -1;
+        }
+    }
+    close(fd);
+
+    fd = open(filename, O_RDWR);
+    if (fd == -1) {
+        perror("open");
+        return -1;
+    }
 
     int line = 1;
     off_t line_start = -1;
-    off_t line_ending = -1;
-	off_t pos = 0;
+    off_t line_end   = -1;
+    off_t pos = 0;
     char ch;
     ssize_t r;
 
-	while (true){
-		r = read(fd, &ch, 1);
-		if(r == -1) {
-			perror("read");
-			close(fd);
-			return -1;
-		}
-		if(r==0) {
-			break;
-		}
+    while (true) {
+        r = read(fd, &ch, 1);
+        if (r == -1) {
+            perror("read");
+            close(fd);
+            return -1;
+        }
+        if (r == 0) {
+            break;
+        }
 
-		if (line == 4 && line_start == -1) {
+        if (line == 4 && line_start == -1) {
             line_start = pos;
         }
-		pos++;
 
-		if(ch == '\n'){
-			if (line == 4) {
+        pos++;
+
+        if (ch == '\n') {
+            if (line == 4) {
                 line_end = pos;
                 break;
             }
             line++;
-		}
-	}
+        }
+    }
 
-	off_t file_end = lseek(fd, 0, SEEK_END);
+    if (line_start == -1 || line_end == -1) {
+        fprintf(stderr, "file has less than 4 lines\n");
+        close(fd);
+        return -1;
+    }
+
+    off_t file_end = lseek(fd, 0, SEEK_END);
     if (file_end == (off_t)-1) {
         perror("lseek end");
         close(fd);
         return 1;
     }
-	
-	off_t tail_len = file_end - line_end;
+
+    off_t tail_len = file_end - line_end;
     char *tail = NULL;
 
     if (tail_len > 0) {
@@ -85,7 +93,7 @@ int main(){
             return 1;
         }
 
-		if (lseek(fd, line_end, SEEK_SET) == (off_t)-1) {
+        if (lseek(fd, line_end, SEEK_SET) == (off_t)-1) {
             perror("lseek line_end");
             free(tail);
             close(fd);
@@ -100,29 +108,29 @@ int main(){
             return 1;
         }
         if (r != tail_len) {
-            perror(stderr, "short read tail\n");
+            fprintf(stderr, "short read tail\n");
             free(tail);
             close(fd);
             return 1;
         }
-	}
+    }
 
-	if (lseek(fd, line_start, SEEK_SET) == (off_t)-1) {
-        	perror("lseek");
-			free(tail);
-        	close(fd);
-        	return -1;
-    	}
+    if (lseek(fd, line_start, SEEK_SET) == (off_t)-1) {
+        perror("lseek line_start");
+        free(tail);
+        close(fd);
+        return -1;
+    }
 
     wr = write(fd, "100\n", 4);
     if (wr == -1) {
-    	perror("write");
-		free(tail);
-    	close(fd);
-    	return -1;
-	}
+        perror("write 100");
+        free(tail);
+        close(fd);
+        return -1;
+    }
 
-	if (tail_len > 0) {
+    if (tail_len > 0) {
         wr = write(fd, tail, (size_t)tail_len);
         if (wr == -1) {
             perror("write tail");
@@ -132,30 +140,29 @@ int main(){
         }
     }
 
-	free(tail);
+    free(tail);
 
-	if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
-        	perror("lseek");
-        	close(fd);
-        	return -1;
-    	}
+    if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
+        perror("lseek");
+        close(fd);
+        return -1;
+    }
 
-    	char readbuf[128];
-    	while ((r = read(fd, readbuf, sizeof(readbuf))) != 0) {
-    	    	if (r == -1) {
-        	perror("read");
-        	close(fd);
-        	return -1;
-        	}
-        	ssize_t out = write(STDOUT_FILENO, readbuf, r);
-        	if (out == -1) {
-            		perror("write");
-            		close(fd);
-            		return -1;
-        	}
-    	}
+    char readbuf[128];
+    while ((r = read(fd, readbuf, sizeof(readbuf))) != 0) {
+        if (r == -1) {
+            perror("read");
+            close(fd);
+            return -1;
+        }
+        ssize_t out = write(STDOUT_FILENO, readbuf, r);
+        if (out == -1) {
+            perror("write");
+            close(fd);
+            return -1;
+        }
+    }
 
-    	close(fd);
-    	return 0;
-	
+    close(fd);
+    return 0;
 }
